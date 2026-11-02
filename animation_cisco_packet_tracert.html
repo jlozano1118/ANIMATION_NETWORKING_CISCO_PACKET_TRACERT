@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador de red estilo Packet Tracer · El viaje de un paquete</title>
+<style>
+:root{
+  --bg:#e7ecf1;--panel:#fff;--bar:#22374b;--line:#cfd6de;--text:#1d2733;--muted:#5c6b7a;
+  --acc:#1f7ae0;--arp:#f2b705;--icmp:#b04ad6;--ok:#16a34a;--bad:#d93025;--warn:#f39c12;
+  --z1:#e8f3ff;--z1b:#7fb3ea;--z2:#eefae9;--z2b:#7cc46a;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",system-ui,-apple-system,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.45}
+header{background:var(--bar);color:#fff;display:flex;align-items:center;gap:12px;padding:9px 16px;flex-wrap:wrap;position:sticky;top:0;z-index:20;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+header h1{font-size:16px;margin:0;font-weight:600}
+.tag{background:var(--warn);color:#1d2733;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:800;letter-spacing:.05em}
+header .sp{flex:1}
+header button{background:#33506b;color:#fff;border-color:#4a6886}
+header button:hover{background:#3d5f80}
+button{font:inherit;cursor:pointer;border:1px solid #b8c2cc;background:#f7f9fb;border-radius:7px;padding:6px 11px;color:var(--text);transition:.15s}
+button:hover{background:#eaf2fc;border-color:var(--acc)}
+button.primary{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}
+button.primary:hover{background:#1868c2}
+button:disabled{opacity:.4;cursor:not-allowed}
+select{font:inherit;padding:6px 8px;border-radius:7px;border:1px solid #b8c2cc;background:#fff}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 390px;gap:12px;padding:12px;max-width:1600px;margin:0 auto}
+@media(max-width:1150px){.layout{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.card>h2{font-size:12px;margin:0;padding:8px 12px;background:#f1f4f7;border-bottom:1px solid var(--line);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;align-items:center;gap:8px}
+.card>h2 .r{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400}
+.pad{padding:10px 12px}
+/* topology */
+#topo{width:100%;height:auto;display:block;background:
+  linear-gradient(#f7f9fb 1px,transparent 1px) 0 0/20px 20px,
+  linear-gradient(90deg,#f7f9fb 1px,#fff 1px) 0 0/20px 20px;}
+.dev{cursor:pointer}
+.dev:hover .hl{opacity:.35}
+.hl{opacity:0;transition:.2s}
+.dev.active .hl{opacity:1;animation:pulse 1s infinite}
+@keyframes pulse{50%{stroke-width:6}}
+.lbl{font-size:13px;font-weight:700;fill:#1d2733}
+.ip{font-size:12px;fill:#204d80;font-family:Consolas,monospace}
+.port{font-size:11px;fill:#555;font-family:Consolas,monospace;paint-order:stroke;stroke:#fff;stroke-width:4px}
+.zone-t{font-size:13px;font-weight:700}
+.env{cursor:pointer}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);padding:6px 12px;border-top:1px solid var(--line);align-items:center}
+.sw{display:inline-block;width:14px;height:10px;border-radius:2px;vertical-align:middle;margin-right:4px}
+/* narrator */
+.narr{padding:12px 14px;min-height:120px}
+.narr .stepn{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.narr .story{font-size:15px;margin:6px 0}
+.narr .story p{margin:6px 0}
+.simple{background:#fff8e1;border-left:4px solid var(--arp);padding:8px 10px;border-radius:6px;margin-top:8px;font-size:14px}
+.final{border-radius:8px;padding:10px 12px;margin-top:8px;font-size:14px}
+.final.ok{background:#e8f8ee;border:1px solid #9bd8b1}
+.final.bad{background:#fdecea;border:1px solid #f1a9a3}
+.controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--line);background:#fafbfc}
+.controls .sp{flex:1}
+.controls label{font-size:12px;color:var(--muted)}
+.progress{height:4px;background:#e3e8ee}
+.progress div{height:100%;background:var(--acc);width:0;transition:width .3s}
+/* tabs */
+.tabs{display:flex;border-bottom:1px solid var(--line);background:#f7f9fb}
+.tabs button{border:0;border-radius:0;background:transparent;padding:8px 14px;border-bottom:3px solid transparent;color:var(--muted);font-weight:600}
+.tabs button.on{border-bottom-color:var(--acc);color:var(--acc);background:#fff}
+.tabpane{display:none;padding:12px}
+.tabpane.on{display:block}
+.osi{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.osi h4{margin:0 0 6px;font-size:13px}
+.layer{border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-bottom:5px;font-size:13px;background:#fbfcfd}
+.layer b{display:inline-block;min-width:62px;color:#204d80}
+.layer.off{opacity:.4}
+.fields{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0 12px}
+.f{border:1px solid #9fb1c4;border-radius:4px;padding:3px 7px;font-size:12px;background:#f4f8fc;min-width:90px}
+.f small{display:block;color:var(--muted);font-size:10px;text-transform:uppercase}
+.f code{font-size:12.5px}
+.f.chg{background:#fff3c4;border-color:#e0b100}
+.hdr{font-weight:700;font-size:13px;margin-top:4px}
+.nest{display:flex;align-items:stretch;font-size:12px;margin:4px 0 14px;flex-wrap:wrap}
+.nest div{padding:6px 8px;border:1px solid #333;border-left:0;display:flex;align-items:center}
+.nest div:first-child{border-left:1px solid #333;border-radius:5px 0 0 5px}
+.nest div:last-child{border-radius:0 5px 5px 0}
+ul.notes{margin:4px 0 8px;padding-left:20px}
+ul.notes li{margin:3px 0}
+/* tables */
+.live{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:10px}
+@media(max-width:900px){.live{grid-template-columns:1fr}}
+.tb{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tb h5{margin:0;padding:5px 8px;background:#f1f4f7;font-size:12px;display:flex;justify-content:space-between}
+.tb h5 span{font-weight:400;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:3px 6px;border-bottom:1px solid #eef1f4;text-align:left;font-family:Consolas,monospace}
+th{font-family:inherit;color:var(--muted);font-weight:600;background:#fafbfc}
+td.empty{color:#9aa6b2;font-style:italic;font-family:inherit}
+tr.new td{animation:flash 2.2s}
+@keyframes flash{0%,40%{background:#ffe680}100%{background:transparent}}
+/* events */
+.evwrap{max-height:290px;overflow:auto}
+#events tr{cursor:pointer}
+#events tr:hover td{background:#eef5fd}
+#events tr.sel td{background:#d9e9fb}
+#events tr.cur td{font-weight:700}
+.dot{display:inline-block;width:12px;height:9px;border-radius:2px;vertical-align:middle}
+.form{display:grid;grid-template-columns:auto 1fr;gap:6px 8px;align-items:center}
+.scen{display:grid;grid-template-columns:1fr;gap:6px;margin-bottom:10px}
+.scen button{text-align:left;display:flex;gap:8px;align-items:flex-start}
+.scen button b{display:block}
+.scen button small{color:var(--muted)}
+.num{background:var(--acc);color:#fff;border-radius:50%;min-width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
+.chk{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;margin-top:8px;color:var(--muted)}
+.cmd{background:#0c0c0c;color:#cfcfcf;font-family:Consolas,monospace;font-size:12px;padding:8px 10px;height:160px;overflow:auto;white-space:pre-wrap}
+details{border-bottom:1px solid #eef1f4;padding:7px 12px}
+details summary{cursor:pointer;font-weight:600}
+details p{margin:6px 0;font-size:13.5px}
+.res td{font-family:inherit}
+.st-ok{color:var(--ok);font-weight:700}.st-bad{color:var(--bad);font-weight:700}
+/* modal */
+.modal{position:fixed;inset:0;background:rgba(15,25,35,.55);display:none;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal.on{display:flex}
+.mbox{background:#fff;border-radius:12px;max-width:760px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+.mhead{display:flex;align-items:center;padding:10px 14px;background:var(--bar);color:#fff;position:sticky;top:0}
+.mhead h3{margin:0;font-size:15px;flex:1}
+.mhead button{background:transparent;color:#fff;border:0;font-size:20px;padding:0 6px}
+pre.cli{background:#0c0c0c;color:#d7d7d7;padding:10px;border-radius:6px;font-size:12.5px;overflow:auto;margin:0}
+.welcome{padding:18px 22px}
+.welcome h2{margin:0 0 6px}
+.wgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
+@media(max-width:600px){.wgrid{grid-template-columns:1fr}}
+.wgrid div{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fafcff}
+.wgrid b{display:block;margin-bottom:3px}
+kbd{background:#eef1f4;border:1px solid #c6ced6;border-radius:4px;padding:0 5px;font-size:12px}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="tag">SIMULACIÓN</span>
+  <h1>Simulador de red estilo Cisco Packet Tracer: el viaje de un paquete</h1>
+  <span class="sp"></span>
+  <button onclick="openWelcome()">❓ Cómo usar</button>
+  <button onclick="openConcepts()">📘 Conceptos básicos</button>
+</header>
+
+<div class="layout">
+  <!-- ============ COLUMNA IZQUIERDA ============ -->
+  <div class="col">
+    <div class="card">
+      <h2>🖧 Topología lógica <span class="r">Haz clic en cualquier equipo para ver su configuración y sus tablas</span></h2>
+      <svg id="topo" viewBox="0 0 1000 520" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="sh" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity=".25"/></filter>
+          <marker id="ah" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#fff"/></marker>
+        </defs>
+        <g id="zones"></g>
+        <g id="links"></g>
+        <g id="devs"></g>
+        <g id="pdus"></g>
+      </svg>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--arp)"></span>ARP (preguntar “¿quién tiene esta IP?”)</span>
+        <span><span class="sw" style="background:var(--icmp)"></span>ICMP (el ping)</span>
+        <span style="color:var(--ok)">✔ aceptado/procesado</span>
+        <span style="color:var(--bad)">✘ descartado</span>
+        <span>Cable: <b>línea negra</b> = cobre directo · ● verde = puerto activo</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🎓 Narrador: ¿qué está pasando? <span class="r" id="stepInfo">Sin simulación</span></h2>
+      <div class="progress"><div id="prog"></div></div>
+      <div class="narr" id="narr">
+        <div class="story"><p>👉 Elige un <b>escenario guiado</b> a la derecha (o un origen y un destino) y pulsa <b>Enviar ping</b>. Luego usa <b>▶ Reproducir</b> o avanza <b>paso a paso</b>.</p>
+        <p>Cada sobre que verás moverse es un <b>paquete</b>. Si haces clic en un sobre o en una fila de la lista de eventos, verás qué lleva por dentro, como en Packet Tracer.</p></div>
+      </div>
+      <div class="controls">
+        <button id="bReset" onclick="gotoStart()" title="Volver al inicio de esta simulación">⏮ Inicio</button>
+        <button id="bBack" onclick="stepBack()" title="Paso anterior (←)">◀ Atrás</button>
+        <button id="bPlay" class="primary" onclick="togglePlay()" title="Reproducir/Pausar (espacio)">▶ Reproducir</button>
+        <button id="bFwd" onclick="stepForward()" title="Paso siguiente (→)">Adelante ▶</button>
+        <span class="sp"></span>
+        <label>Velocidad</label>
+        <input type="range" id="speed" min="1" max="5" value="2" style="width:110px">
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>📦 Información del PDU <span class="r" id="pduTitle">Selecciona un evento</span></h2>
+      <div class="tabs">
+        <button class="on" data-t="tExp">Explicación</button>
+        <button data-t="tOsi">Modelo OSI</button>
+        <button data-t="tHdr">Encabezados (por dentro)</button>
+      </div>
+      <div class="tabpane on" id="tExp"><span style="color:var(--muted)">Aquí aparecerá la explicación detallada del evento seleccionado.</span></div>
+      <div class="tabpane" id="tOsi"><span style="color:var(--muted)">Capas OSI de entrada y salida del dispositivo (igual que en Packet Tracer).</span></div>
+      <div class="tabpane" id="tHdr"><span style="color:var(--muted)">Campos de la trama Ethernet, ARP, IP e ICMP.</span></div>
+    </div>
+
+    <div class="card">
+      <h2>📋 Tablas en vivo <span class="r">Mira cómo se van llenando (amarillo = entrada nueva)</span></h2>
+      <div class="live" id="live"></div>
+    </div>
+  </div>
+
+  <!-- ============ COLUMNA DERECHA ============ -->
+  <div class="col">
+    <div class="card">
+      <h2>🚀 Crear PDU (Add Simple PDU)</h2>
+      <div class="pad">
+        <div class="scen">
+          <button onclick="scenario('PC1','192.168.10.11')"><span class="num">1</span><span><b>Misma red: PC1 → PC2</b><small>El switch lo resuelve solo. Aparece ARP.</small></span></button>
+          <button onclick="scenario('PC1','192.168.20.10')"><span class="num">2</span><span><b>Entre redes: PC1 → PC4</b><small>Pasa por el router: el viaje completo.</small></span></button>
+          <button onclick="scenario('PC1','192.168.20.10',true)"><span class="num">3</span><span><b>Repetir el ping 2 (tablas ya llenas)</b><small>¿Por qué ahora es mucho más corto?</small></span></button>
+          <button onclick="scenario('PC5','192.168.20.1')"><span class="num">4</span><span><b>PC5 → su gateway (router)</b><small>Ping a la puerta de enlace.</small></span></button>
+        </div>
+        <div class="form">
+          <label>Origen</label><select id="src"></select>
+          <label>Destino</label><select id="dst"></select>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+          <button class="primary" onclick="sendPing()">✉ Enviar ping</button>
+          <button onclick="resetNet()" title="Borra tablas ARP y MAC, como apagar y encender">🔄 Reiniciar red</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="realistic"> <span><b>Comportamiento real de Cisco:</b> el router descarta el primer paquete mientras resuelve ARP. Por eso en Packet Tracer el primer ping entre redes suele dar <i>timeout</i>.</span></label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⏱ Lista de eventos (Event List) <span class="r" id="evCount"></span></h2>
+      <div class="evwrap">
+        <table id="events"><thead><tr><th>Paso</th><th>Último disp.</th><th>En disp.</th><th>Tipo</th><th></th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>💻 Símbolo del sistema <span class="r" id="cmdTitle">PC</span></h2>
+      <div class="cmd" id="cmd">Packet Tracer PC Command Line 1.0
+C:\&gt;</div>
+    </div>
+
+    <div class="card">
+      <h2>📑 PDUs enviados (Scenario 0)</h2>
+      <div class="pad" style="padding:0">
+        <table class="res" id="results"><thead><tr><th>#</th><th>Estado</th><th>Origen</th><th>Destino</th><th>Tipo</th></tr></thead><tbody><tr><td colspan="5" class="empty">Aún no se ha enviado ningún ping</td></tr></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GENÉRICO -->
+<div class="modal" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="mbox"><div class="mhead"><h3 id="mTitle"></h3><button onclick="closeModal()">×</button></div><div id="mBody"></div></div>
+</div>
+
+<script>
+/* =====================================================================
+   1. DEFINICIÓN DE LA TOPOLOGÍA
+   ===================================================================== */
+const BC='FFFF.FFFF.FFFF', ZERO='0000.0000.0000';
+const MASK='255.255.255.0';
+const DEV={
+  R1:{type:'router',name:'R1',model:'Router Cisco 2911',x:500,y:95,ifaces:{
+    'G0/0':{ip:'192.168.10.1',mask:MASK,mac:'0001.4211.0A01',desc:'Red 1 (SW1)'},
+    'G0/1':{ip:'192.168.20.1',mask:MASK,mac:'0001.4211.0A02',desc:'Red 2 · VLAN 40 (SW2)'}}},
+  SW1:{type:'switch',name:'SW1',model:'Switch Cisco 2960',x:255,y:255,ports:{'G0/1':1,'Fa0/1':1,'Fa0/2':1,'Fa0/3':1}},
+  SW2:{type:'switch',name:'SW2',model:'Switch Cisco 2960',x:745,y:255,ports:{'G0/1':40,'Fa0/1':40,'Fa0/2':40}},
+  PC1:{type:'pc',name:'PC1',x:105,y:410,ip:'192.168.10.10',mask:MASK,gw:'192.168.10.1',mac:'00E0.F7A1.0A10'},
+  PC2:{type:'pc',name:'PC2',x:255,y:430,ip:'192.168.10.11',mask:MASK,gw:'192.168.10.1',mac:'00E0.F7A1.0A11'},
+  PC3:{type:'pc',name:'PC3',x:405,y:410,ip:'192.168.10.12',mask:MASK,gw:'192.168.10.1',mac:'00E0.F7A1.0A12'},
+  PC4:{type:'pc',name:'PC4',x:650,y:420,ip:'192.168.20.10',mask:MASK,gw:'192.168.20.1',mac:'0060.2F84.1410'},
+  PC5:{type:'pc',name:'PC5',x:840,y:420,ip:'192.168.20.11',mask:MASK,gw:'192.168.20.1',mac:'0060.2F84.1411'},
+};
+const PCS=['PC1','PC2','PC3','PC4','PC5'];
+const LINKS=[
+  ['R1','G0/0','SW1','G0/1'],['R1','G0/1','SW2','G0/1'],
+  ['SW1','Fa0/1','PC1','Fa0'],['SW1','Fa0/2','PC2','Fa0'],['SW1','Fa0/3','PC3','Fa0'],
+  ['SW2','Fa0/1','PC4','Fa0'],['SW2','Fa0/2','PC5','Fa0'],
+];
+function peer(d,p){for(const l of LINKS){if(l[0]===d&&l[1]===p)return{dev:l[2],port:l[3]};if(l[2]===d&&l[3]===p)return{dev:l[0],port:l[1]};}}
+
+/* ---------- utilidades IP ---------- */
+const ipInt=ip=>ip.split('.').reduce((a,b)=>(a<<8)+(+b),0)>>>0;
+const sameNet=(a,b,m)=>((ipInt(a)&ipInt(m))>>>0)===((ipInt(b)&ipInt(m))>>>0);
+const net3=ip=>ip.split('.').slice(0,3).join('.');
+function ipOwner(ip){
+  for(const id of PCS) if(DEV[id].ip===ip) return id;
+  for(const k in DEV.R1.ifaces) if(DEV.R1.ifaces[k].ip===ip) return 'R1 ('+k+')';
+  return ip;
+}
+function macOwner(mac){
+  if(mac===BC) return 'todos (broadcast)';
+  for(const id of PCS) if(DEV[id].mac===mac) return id;
+  for(const k in DEV.R1.ifaces) if(DEV.R1.ifaces[k].mac===mac) return 'R1 '+k;
+  return mac;
+}
+const clone=o=>JSON.parse(JSON.stringify(o));
+
+/* =====================================================================
+   2. ESTADO DE LA RED (tablas ARP, tablas MAC, colas)
+   ===================================================================== */
+function emptyState(){
+  const s={arp:{},mac:{SW1:{},SW2:{}},pending:{}};
+  for(const id of PCS){s.arp[id]={};s.pending[id]=[];}
+  s.arp.R1={};s.pending.R1=[];
+  return s;
+}
+let NET=emptyState();
+let SEQ=0, PINGN=0;
+let realistic=false;
+
+/* ---------- constructores de tramas ---------- */
+const ethIp=(src,dst,ip)=>({src,dst,type:'IPv4',ip});
+const arpReq=(smac,sip,tip)=>({src:smac,dst:BC,type:'ARP',arp:{op:1,smac,sip,tmac:ZERO,tip}});
+const arpRep=(smac,sip,tmac,tip)=>({src:smac,dst:tmac,type:'ARP',arp:{op:2,smac,sip,tmac,tip}});
+const kindOf=f=>f.type==='ARP'?'ARP':'ICMP';
+const label=f=>f.type==='ARP'?(f.arp.op===1?'ARP Request':'ARP Reply'):(f.ip.icmp.type===8?'ICMP Echo Request':'ICMP Echo Reply');
+const icmpName=p=>p.icmp.type===8?'Echo Request (la pregunta del ping)':'Echo Reply (la respuesta del ping)';
+
+/* =====================================================================
+   3. MOTOR DE SIMULACIÓN: cada dispositivo procesa lo que le llega
+   ===================================================================== */
+
+// Un PC quiere enviar un paquete IP: decide si es su red o la del gateway, y si conoce la MAC
+function pcSendIp(st,id,pkt){
+  const d=DEV[id],notes=[],out=[];
+  const same=sameNet(pkt.dst,d.ip,d.mask);
+  notes.push(`Compara redes usando la máscara <b>/24</b> (${d.mask}): la red del destino es <b>${net3(pkt.dst)}</b>.x y la suya es <b>${net3(d.ip)}</b>.x.`);
+  if(same) notes.push(`✅ Son iguales: el destino está en <b>su misma red</b>, así que se lo entregará directamente, sin pasar por el router.`);
+  else notes.push(`↗ Son diferentes: el destino está en <b>otra red</b>, así que debe enviarlo a su <b>puerta de enlace (gateway) ${d.gw}</b>, que es el router.`);
+  const nh=same?pkt.dst:d.gw;
+  const mac=st.arp[id][nh];
+  if(mac){
+    notes.push(`Busca la IP ${nh} en su <b>tabla ARP</b> y la encuentra: su MAC es <code>${mac}</code>. Arma la trama Ethernet y la envía.`);
+    out.push({dev:id,port:'Fa0',frame:ethIp(d.mac,mac,pkt),
+      why:`${id} envía un <b>${icmpName(pkt)}</b> dentro de una trama Ethernet dirigida a la MAC <code>${mac}</code> (${macOwner(mac)}). IP origen ${pkt.src} → IP destino ${pkt.dst}.`});
+  }else{
+    notes.push(`Busca ${nh} en su <b>tabla ARP</b> y <b>no la encuentra</b>. Sabe la IP, pero le falta la MAC (la dirección física de la tarjeta de red). Deja el ping en espera y primero pregunta con <b>ARP</b>.`);
+    st.pending[id].push({nh,pkt});
+    out.push({dev:id,port:'Fa0',frame:arpReq(d.mac,d.ip,nh),
+      why:`${id} envía un <b>ARP Request</b> a TODOS (MAC destino broadcast <code>FFFF.FFFF.FFFF</code>): “¿Quién tiene la IP <b>${nh}</b>? Respóndale a ${d.ip}”.`});
+  }
+  return {notes,out,same};
+}
+
+function flushPending(st,id,ip,mac,notes){
+  const out=[];const keep=[];
+  for(const p of st.pending[id]){
+    if(p.nh===ip){
+      if(id==='R1'){
+        const ifc=DEV.R1.ifaces[p.iface];
+        notes.push(`Tenía un paquete en espera para ${ip}: ahora lo reenvía por ${p.iface} en una trama nueva (MAC origen <code>${ifc.mac}</code> → MAC destino <code>${mac}</code>).`);
+        out.push({dev:'R1',port:p.iface,frame:ethIp(ifc.mac,mac,p.pkt),why:`R1 reenvía el ping que tenía en espera por ${p.iface}. Las IP no cambian; las MAC son nuevas.`});
+      }else{
+        notes.push(`¡Ya tiene la MAC que le faltaba! Saca el ping que tenía en espera y lo envía.`);
+        out.push({dev:id,port:'Fa0',frame:ethIp(DEV[id].mac,mac,p.pkt),why:`${id} envía por fin el <b>${icmpName(p.pkt)}</b> que tenía guardado, ahora con la MAC destino correcta <code>${mac}</code> (${macOwner(mac)}).`});
+      }
+    }else keep.push(p);
+  }
+  st.pending[id]=keep;
+  return out;
+}
+
+/* ---- SWITCH ---- */
+function swRecv(st,id,port,f){
+  const d=DEV[id],vlan=d.ports[port],tbl=st.mac[id],notes=[];
+  const known=tbl[f.src]&&tbl[f.src].port===port;
+  tbl[f.src]={port,vlan};
+  notes.push(known?`Ya tenía la MAC origen <code>${f.src}</code> asociada al puerto ${port}; solo refresca la entrada.`
+                  :`<b>Aprende:</b> la MAC origen <code>${f.src}</code> (${macOwner(f.src)}) está detrás del puerto <b>${port}</b> (VLAN ${vlan}). La anota en su <b>tabla MAC</b>.`);
+  let outPorts=[],mode;
+  if(f.dst===BC){
+    outPorts=Object.keys(d.ports).filter(p=>p!==port&&d.ports[p]===vlan);mode='bc';
+    notes.push(`La MAC destino es <b>broadcast</b> (FFFF.FFFF.FFFF), así que <b>inunda</b> (flooding): copia la trama por todos los puertos de la VLAN ${vlan} excepto por donde llegó: ${outPorts.join(', ')}.`);
+  }else if(tbl[f.dst]&&tbl[f.dst].vlan===vlan){
+    const op=tbl[f.dst].port;
+    if(op===port){notes.push('El destino está en el mismo puerto de llegada: filtra la trama.');}
+    else{outPorts=[op];mode='uni';notes.push(`Busca la MAC destino <code>${f.dst}</code> en su tabla: está en el puerto <b>${op}</b>. La reenvía <b>solo por ese puerto</b> (no molesta a los demás).`);}
+  }else{
+    outPorts=Object.keys(d.ports).filter(p=>p!==port&&d.ports[p]===vlan);mode='unk';
+    notes.push(`No conoce todavía la MAC destino <code>${f.dst}</code>, así que la envía por todos los puertos de la VLAN ${vlan} (excepto el de llegada). A esto se le llama <i>unknown unicast flooding</i>.`);
+  }
+  const short=mode==='bc'?`${id} anota de dónde vino y, como es un broadcast, lo copia a todos sus otros puertos.`
+            :mode==='uni'?`${id} mira su tabla MAC y lo envía solo por el puerto correcto (${outPorts[0]}).`
+            :`${id} no sabe dónde está esa MAC y lo copia a todos.`;
+  return {outcome:'ok',short,notes,
+    simple:mode==='bc'?'El switch es como el <b>portero de un edificio</b>: alguien gritó una pregunta para todos, así que el portero la repite en todos los pisos.'
+          :'El switch es como el <b>portero de un edificio</b> que tiene anotado en qué apartamento vive cada persona: entrega la carta solo en la puerta correcta.',
+    osiIn:[['Capa 1',`El puerto ${port} recibe los bits por el cable.`],['Capa 2',`Lee la trama Ethernet: MAC origen ${f.src}, MAC destino ${f.dst}. Aprende la MAC origen.`]],
+    osiOut:[['Capa 2',outPorts.length?`Decide la salida por MAC destino → ${outPorts.join(', ')}.`:'Descarta (filtrado).'],['Capa 1',outPorts.length?`Envía los bits por ${outPorts.join(', ')}.`:'—']],
+    outputs:outPorts.map(p=>({dev:id,port:p,frame:f,why:`${id} reenvía la trama por su puerto ${p} (${mode==='uni'?'decisión por tabla MAC':'inundación'}).`}))};
+}
+
+/* ---- PC ---- */
+function pcRecv(st,id,port,f,ctx){
+  const d=DEV[id];
+  const L1=['Capa 1','La tarjeta de red (Fa0) recibe los bits.'];
+  if(f.dst!==d.mac&&f.dst!==BC){
+    return {outcome:'drop',short:`${id} ve que la trama no es para él (otra MAC) y la descarta.`,
+      notes:[`La MAC destino <code>${f.dst}</code> no es su MAC (<code>${d.mac}</code>). La descarta.`],
+      simple:'Como recibir una carta con el nombre de otra persona: no la abres.',
+      osiIn:[L1,['Capa 2','MAC destino ≠ mi MAC → descartar.']],osiOut:[],outputs:[]};
+  }
+  if(f.type==='ARP'){
+    const a=f.arp;
+    if(a.op===1){
+      if(a.tip!==d.ip){
+        return {outcome:'drop',short:`${id} escucha la pregunta ARP (“¿quién tiene ${a.tip}?”), pero esa no es su IP: la ignora.`,
+          notes:[`Es un broadcast, así que lo abre. El ARP pregunta por <b>${a.tip}</b>, pero su IP es ${d.ip}. No es con él: lo descarta.`],
+          simple:'Alguien gritó en el pasillo “¿Quién es Carlos?” y tú te llamas Ana: sigues en lo tuyo.',
+          osiIn:[L1,['Capa 2','MAC destino broadcast → la acepta y la pasa a ARP.'],['ARP',`IP buscada ${a.tip} ≠ ${d.ip} → descartar.`]],osiOut:[],outputs:[]};
+      }
+      st.arp[id][a.sip]=a.smac;
+      const rep=arpRep(d.mac,d.ip,a.smac,a.sip);
+      return {outcome:'ok',short:`${id}: “¡Esa IP es la mía!”. Anota quién preguntó y responde con su MAC.`,
+        notes:[`El ARP pregunta por <b>${a.tip}</b>: ¡es su IP!`,`Aprovecha y anota en su tabla ARP: ${a.sip} → <code>${a.smac}</code>.`,`Responde con un <b>ARP Reply</b> directo (unicast) a <code>${a.smac}</code>: “${d.ip} soy yo, mi MAC es ${d.mac}”.`],
+        simple:'Alguien gritó “¿Quién es Ana?” y tú eres Ana: le respondes en persona “¡Soy yo, aquí estoy!”.',
+        osiIn:[L1,['Capa 2','Trama broadcast con contenido ARP.'],['ARP',`IP buscada = mi IP → responder.`]],
+        osiOut:[['ARP','Construye el ARP Reply con mi MAC.'],['Capa 2',`Trama unicast hacia ${a.smac}.`],['Capa 1','Envía los bits por Fa0.']],
+        outputs:[{dev:id,port:'Fa0',frame:rep,why:`${id} responde con un <b>ARP Reply</b> (unicast, solo para quien preguntó): “La IP ${d.ip} está en la MAC <code>${d.mac}</code>”.`}]};
+    }else{
+      st.arp[id][a.sip]=a.smac;
+      const notes=[`Recibe la respuesta: <b>${a.sip}</b> tiene la MAC <code>${a.smac}</code>. La guarda en su tabla ARP para no volver a preguntar.`];
+      const outs=flushPending(st,id,a.sip,a.smac,notes);
+      return {outcome:'ok',short:`${id} recibe la respuesta ARP, guarda la MAC y envía el ping que tenía en espera.`,notes,
+        simple:'Ya tienes la dirección exacta del destinatario: ahora sí puedes enviar la carta.',
+        osiIn:[L1,['Capa 2','Trama unicast para mí con contenido ARP.'],['ARP',`Guarda ${a.sip} → ${a.smac}.`]],
+        osiOut:[['Capa 3','Saca el paquete ICMP en espera.'],['Capa 2','Lo encapsula con la MAC aprendida.'],['Capa 1','Envía por Fa0.']],outputs:outs};
+    }
+  }
+  // IPv4
+  const p=f.ip;
+  if(p.dst!==d.ip){
+    return {outcome:'drop',short:`${id} descarta: el paquete IP no es para él.`,notes:['La IP destino no es la suya. Un PC no enruta: lo descarta.'],simple:'',osiIn:[L1,['Capa 2','Para mí.'],['Capa 3','IP destino ≠ mi IP.']],osiOut:[],outputs:[]};
+  }
+  if(p.icmp.type===8){
+    const reply={src:d.ip,dst:p.src,ttl:128,proto:1,icmp:{type:0,seq:p.icmp.seq}};
+    const r=pcSendIp(st,id,reply);
+    return {outcome:'ok',short:`📬 ¡El ping llegó a ${id}! Ahora ${id} prepara la respuesta (Echo Reply) para ${p.src}.`,
+      notes:[`Abre la trama (capa 2): la MAC destino es la suya.`,`Abre el paquete (capa 3): la IP destino ${p.dst} es la suya. Llegó con TTL ${p.ttl}.`,`Dentro hay un <b>ICMP Echo Request</b>: “¿estás ahí?”. Debe contestar con un <b>Echo Reply</b> hacia ${p.src}.`,...r.notes],
+      simple:'Le llegó la carta que dice “¿Estás ahí?”. Escribe “¡Sí, aquí estoy!” y la envía de vuelta al remitente.',
+      osiIn:[L1,['Capa 2',`MAC destino = mi MAC → quita el encabezado Ethernet.`],['Capa 3',`IP destino = mi IP → entrega a ICMP.`],['ICMP','Echo Request recibido.']],
+      osiOut:[['ICMP','Crea Echo Reply.'],['Capa 3',`IP origen ${reply.src} → IP destino ${reply.dst}, TTL 128.`],['Capa 2',r.out[0].frame.type==='ARP'?'Necesita MAC: genera ARP.':`MAC destino ${r.out[0].frame.dst}.`],['Capa 1','Envía por Fa0.']],
+      outputs:r.out};
+  }
+  // echo reply a origen
+  ctx.result='ok';ctx.replyTtl=p.ttl;
+  return {outcome:'done',short:`🎉 ${id} recibe la respuesta del ping. ¡Comunicación exitosa de ida y vuelta!`,
+    notes:[`Recibe el <b>ICMP Echo Reply</b> desde ${p.src} con TTL ${p.ttl}.`,p.ttl<128?`El TTL bajó de 128 a ${p.ttl}: eso indica que pasó por <b>${128-p.ttl} router</b>.`:(p.ttl===255?'TTL 255: los routers Cisco responden con TTL inicial 255.':'TTL 128 intacto: no pasó por ningún router (misma red).'),'En la consola aparece: <code>Reply from '+p.src+': bytes=32 time&lt;1ms TTL='+p.ttl+'</code>'],
+    simple:'Te llegó la respuesta “¡Sí, aquí estoy!”. Ya sabes que hay conexión entre los dos equipos.',
+    osiIn:[L1,['Capa 2','Para mí.'],['Capa 3','Para mí.'],['ICMP','Echo Reply → ping exitoso.']],osiOut:[],outputs:[]};
+}
+
+/* ---- ROUTER ---- */
+function rtRoute(st,pkt,notes,out,ctx){
+  const R=DEV.R1;
+  const ifn=Object.keys(R.ifaces).find(k=>sameNet(pkt.dst,R.ifaces[k].ip,R.ifaces[k].mask));
+  if(!ifn){notes.push('No hay ruta hacia el destino: descarta.');return 'drop';}
+  const ifc=R.ifaces[ifn];
+  notes.push(`Consulta su <b>tabla de enrutamiento</b>: la red <b>${net3(pkt.dst)}.0/24</b> está <b>directamente conectada</b> (código C) por la interfaz <b>${ifn}</b>. Esa será la salida.`);
+  const e=st.arp.R1[pkt.dst];
+  if(e){
+    notes.push(`Busca ${pkt.dst} en su tabla ARP: MAC <code>${e.mac}</code>. Arma una <b>trama nueva</b>: MAC origen <code>${ifc.mac}</code> (su ${ifn}) → MAC destino <code>${e.mac}</code>.`);
+    out.push({dev:'R1',port:ifn,frame:ethIp(ifc.mac,e.mac,pkt),why:`R1 reenvía el paquete por <b>${ifn}</b> en una trama Ethernet <b>nueva</b>. Las IP origen/destino <b>no cambian</b>; las MAC sí.`});
+    return 'ok';
+  }
+  notes.push(`No conoce la MAC de ${pkt.dst}: debe preguntar con ARP por la interfaz ${ifn}.`);
+  let res;
+  if(realistic){
+    notes.push(`⚠ <b>Comportamiento real de Cisco:</b> mientras resuelve ARP, el router <b>descarta este paquete</b>. El PC de origen esperará la respuesta y dará <i>Request timed out</i>. El siguiente ping sí funcionará.`);
+    ctx.routerDrop=true;res='drop';
+  }else{
+    st.pending.R1.push({nh:pkt.dst,pkt,iface:ifn});
+    notes.push('Guarda el paquete en espera mientras averigua la MAC (modo didáctico).');res='ok';
+  }
+  out.push({dev:'R1',port:ifn,frame:arpReq(ifc.mac,ifc.ip,pkt.dst),why:`R1 envía un <b>ARP Request</b> broadcast por ${ifn}: “¿Quién tiene la IP <b>${pkt.dst}</b>? Respóndale a ${ifc.ip}”.`});
+  return res;
+}
+
+function rtRecv(st,id,port,f,ctx){
+  const R=DEV.R1,ifc=R.ifaces[port];
+  const L1=['Capa 1',`La interfaz ${port} recibe los bits.`];
+  if(f.dst!==ifc.mac&&f.dst!==BC){
+    return {outcome:'drop',short:'R1 descarta: la trama no va dirigida a su MAC.',notes:['La MAC destino no es la de esta interfaz.'],simple:'',osiIn:[L1,['Capa 2','MAC destino ≠ mía.']],osiOut:[],outputs:[]};
+  }
+  if(f.type==='ARP'){
+    const a=f.arp;
+    if(a.op===1){
+      if(a.tip!==ifc.ip){
+        return {outcome:'drop',short:`R1 recibe el broadcast ARP, pero no preguntan por él. Además, <b>un router nunca reenvía broadcasts</b> a otras redes: lo descarta.`,
+          notes:[`Pregunta por ${a.tip}, que no es la IP de ${port} (${ifc.ip}).`,`<b>Dato clave:</b> los routers <b>no reenvían broadcasts</b>. Por eso cada interfaz del router marca el límite de un <b>dominio de broadcast</b>: el “grito” de la Red 1 nunca llega a la Red 2.`],
+          simple:'El router es como la <b>frontera entre dos barrios</b>: lo que se grita en un barrio no se escucha en el otro.',
+          osiIn:[L1,['Capa 2','Broadcast → lo pasa a ARP.'],['ARP','No es mi IP → descartar. No se reenvía.']],osiOut:[],outputs:[]};
+      }
+      st.arp.R1[a.sip]={mac:a.smac,iface:port};
+      return {outcome:'ok',short:`R1: “¡${a.tip} es mi interfaz ${port}!”. Responde con su MAC.`,
+        notes:[`El ARP pregunta por ${a.tip}: es la IP de su interfaz <b>${port}</b>.`,`Anota en su tabla ARP: ${a.sip} → <code>${a.smac}</code> (interfaz ${port}).`,`Responde con un ARP Reply: “${ifc.ip} está en la MAC ${ifc.mac}”.`],
+        simple:'El PC le preguntó a la “puerta del barrio” cuál es su dirección física, y el router se la da.',
+        osiIn:[L1,['Capa 2','Broadcast con ARP.'],['ARP','Preguntan por mi IP → responder.']],
+        osiOut:[['ARP','Crea el ARP Reply.'],['Capa 2',`Unicast a ${a.smac}.`],['Capa 1',`Envía por ${port}.`]],
+        outputs:[{dev:'R1',port,frame:arpRep(ifc.mac,ifc.ip,a.smac,a.sip),why:`R1 responde con un <b>ARP Reply</b>: “La IP ${ifc.ip} (gateway) está en la MAC <code>${ifc.mac}</code>”.`}]};
+    }else{
+      st.arp.R1[a.sip]={mac:a.smac,iface:port};
+      const notes=[`Recibe la respuesta ARP: ${a.sip} tiene la MAC <code>${a.smac}</code>. La guarda en su tabla ARP.`];
+      const outs=flushPending(st,'R1',a.sip,a.smac,notes);
+      if(!outs.length) notes.push('No tenía paquetes en espera (el anterior se descartó). El próximo ping ya encontrará la MAC.');
+      return {outcome:'ok',short:outs.length?'R1 aprende la MAC que le faltaba y reenvía el ping que tenía en espera.':'R1 aprende la MAC (el paquete original ya se había descartado).',notes,
+        simple:'El cartero del barrio ya sabe en qué casa vive el destinatario.',
+        osiIn:[L1,['Capa 2','Unicast para mí con ARP.'],['ARP','Guardar en tabla ARP.']],
+        osiOut:outs.length?[['Capa 3','Saca el paquete en espera.'],['Capa 2','Nueva trama con MACs nuevas.'],['Capa 1','Envía.']]:[],outputs:outs};
+    }
+  }
+  // IPv4
+  const p=f.ip;const notes=[`Abre la trama: la MAC destino <code>${f.dst}</code> es la suya. <b>Quita el encabezado Ethernet</b> (capa 2) y lee el paquete IP (capa 3).`,`IP origen ${p.src} → IP destino <b>${p.dst}</b>, TTL ${p.ttl}.`];
+  const out=[];
+  const ownIf=Object.keys(R.ifaces).find(k=>R.ifaces[k].ip===p.dst);
+  if(ownIf){
+    notes.push(`¡La IP destino es la de su propia interfaz ${ownIf}! El ping es para el router mismo. Responde con un Echo Reply (los routers Cisco usan TTL 255).`);
+    const rep={src:p.dst,dst:p.src,ttl:255,proto:1,icmp:{type:0,seq:p.icmp.seq}};
+    rtRoute(st,rep,notes,out,ctx);
+    return {outcome:'ok',short:'El ping era para el router: R1 contesta con un Echo Reply.',notes,
+      simple:'La carta iba dirigida a la oficina de correos misma, así que la oficina responde.',
+      osiIn:[L1,['Capa 2','Para mí: desencapsula.'],['Capa 3','IP destino = mi interfaz.'],['ICMP','Echo Request.']],
+      osiOut:[['ICMP','Echo Reply.'],['Capa 3',`Hacia ${p.src}.`],['Capa 2','Encapsula.'],['Capa 1','Envía.']],outputs:out};
+  }
+  const np={...p,ttl:p.ttl-1};
+  notes.push(`No es para él: hay que <b>enrutarlo</b>. Resta 1 al TTL: ${p.ttl} → <b>${np.ttl}</b> (esto evita que un paquete dé vueltas para siempre).`);
+  const r=rtRoute(st,np,notes,out,ctx);
+  const ifn=Object.keys(R.ifaces).find(k=>sameNet(p.dst,R.ifaces[k].ip,MASK));
+  return {outcome:r==='drop'?'drop':'ok',
+    short:r==='drop'?`R1 sabe a dónde va, pero aún no conoce la MAC del destino: descarta el paquete y pregunta con ARP.`
+                    :`R1 (el router) lee la IP destino, ve que la red ${net3(p.dst)}.0 está por ${ifn}, cambia las MAC y lo reenvía.`,
+    notes,
+    simple:'El router es la <b>oficina de correos entre barrios</b>: quita el sobre exterior, lee la dirección final (IP), decide por qué calle sale y lo mete en un <b>sobre nuevo</b> para el siguiente tramo.',
+    osiIn:[L1,['Capa 2','MAC destino = mi MAC → quita el encabezado Ethernet.'],['Capa 3',`Lee IP destino ${p.dst}; consulta la tabla de rutas.`]],
+    osiOut:[['Capa 3',`Sale por ${ifn}; TTL ${np.ttl}.`],['Capa 2',out[0]&&out[0].frame.type==='IPv4'?`Nueva trama: ${out[0].frame.src} → ${out[0].frame.dst}.`:'Necesita MAC: genera ARP.'],['Capa 1',`Envía por ${ifn}.`]],
+    outputs:out};
+}
+
+function receive(st,dev,port,f,ctx){
+  const t=DEV[dev].type;
+  if(t==='switch')return swRecv(st,dev,port,f);
+  if(t==='pc')return pcRecv(st,dev,port,f,ctx);
+  return rtRecv(st,dev,port,f,ctx);
+}
+
+// Genera toda la secuencia de pasos (como la Event List de Packet Tracer)
+function simulate(src,dstIp){
+  const st=clone(NET);const ctx={result:null};
+  SEQ++;
+  const d=DEV[src];
+  const pkt={src:d.ip,dst:dstIp,ttl:128,proto:1,icmp:{type:8,seq:SEQ}};
+  const o=pcSendIp(st,src,pkt);
+  const steps=[{origin:true,dev:src,moves:[],notes:[`${src} (IP ${d.ip}) quiere saber si <b>${ipOwner(dstIp)}</b> (IP ${dstIp}) está disponible. Crea un paquete <b>ICMP Echo Request</b> (eso es un ping): una pregunta “¿estás ahí?”.`,...o.notes],
+    sameNet:o.same,snap:clone(st)}];
+  let outs=o.out;
+  while(outs.length&&steps.length<50){
+    const moves=[],next=[];
+    for(const ob of outs){
+      const p=peer(ob.dev,ob.port);
+      const fr=clone(ob.frame);
+      const r=receive(st,p.dev,p.port,fr,ctx);
+      moves.push({from:ob.dev,fromPort:ob.port,to:p.dev,toPort:p.port,frame:fr,why:ob.why,...r,outputs:undefined});
+      next.push(...r.outputs);
+    }
+    steps.push({moves,snap:clone(st)});
+    outs=next;
+  }
+  for(const k in st.pending) st.pending[k]=[];
+  return {steps,result:ctx.result||'fail',replyTtl:ctx.replyTtl,routerDrop:ctx.routerDrop,src,dstIp,final:st,seq:SEQ};
+}
+
+/* =====================================================================
+   4. DIBUJO DE LA TOPOLOGÍA (SVG)
+   ===================================================================== */
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent,html){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(html!==undefined)e.innerHTML=html;if(parent)parent.appendChild(e);return e;}
+
+function drawTopo(){
+  const z=document.getElementById('zones');
+  el('rect',{x:22,y:185,width:458,height:325,rx:16,fill:'var(--z1)',stroke:'var(--z1b)','stroke-dasharray':'6 5'},z);
+  el('text',{x:38,y:208,class:'zone-t',fill:'#1f5fa8'},z,'RED 1 · 192.168.10.0 /24 · VLAN 1');
+  el('text',{x:38,y:224,'font-size':11,fill:'#4b6b8f'},z,'Gateway: 192.168.10.1');
+  el('rect',{x:520,y:185,width:458,height:325,rx:16,fill:'var(--z2)',stroke:'var(--z2b)','stroke-dasharray':'6 5'},z);
+  el('text',{x:536,y:208,class:'zone-t',fill:'#2f7d22'},z,'RED 2 · 192.168.20.0 /24 · VLAN 40');
+  el('text',{x:536,y:224,'font-size':11,fill:'#4f7f45'},z,'Gateway: 192.168.20.1');
+
+  const L=document.getElementById('links');
+  for(const [a,ap,b,bp] of LINKS){
+    const A=DEV[a],B=DEV[b];
+    el('line',{x1:A.x,y1:A.y,x2:B.x,y2:B.y,stroke:'#222','stroke-width':2.2},L);
+    for(const [P,Q,pn] of [[A,B,ap],[B,A,bp]]){
+      const dx=Q.x-P.x,dy=Q.y-P.y,len=Math.hypot(dx,dy);
+      const off=P.type==='router'?48:P.type==='switch'?48:38;
+      el('circle',{cx:P.x+dx/len*off,cy:P.y+dy/len*off,r:4.5,fill:'#22c55e',stroke:'#0b7a33'},L);
+      const t=(off+26)/len;
+      el('text',{x:P.x+dx*t+(dy/len)*14,y:P.y+dy*t-(dx/len)*14+4,class:'port','text-anchor':'middle'},L,pn);
+    }
+  }
+  const D=document.getElementById('devs');
+  for(const id in DEV){
+    const d=DEV[id];
+    const g=el('g',{class:'dev',id:'dev-'+id,transform:`translate(${d.x},${d.y})`},D);
+    g.addEventListener('click',()=>openDevice(id));
+    el('circle',{class:'hl',r:52,fill:'none',stroke:'#f39c12','stroke-width':3,'stroke-dasharray':'6 4'},g);
+    el('rect',{x:-46,y:-34,width:92,height:70,fill:'transparent'},g);
+    if(d.type==='router'){
+      const ic=el('g',{filter:'url(#sh)'},g);
+      el('rect',{x:-36,y:-10,width:72,height:20,fill:'#2b6cb0'},ic);
+      el('ellipse',{cx:0,cy:10,rx:36,ry:12,fill:'#1e4f86'},ic);
+      el('ellipse',{cx:0,cy:-10,rx:36,ry:12,fill:'#4a90d9',stroke:'#1e4f86'},ic);
+      for(const [x1,y1,x2,y2] of [[-8,-10,-24,-10],[8,-10,24,-10],[0,-14,0,-21],[0,-6,0,1]])
+        el('line',{x1,y1,x2,y2,stroke:'#fff','stroke-width':2.4,'marker-end':'url(#ah)'},ic);
+      el('text',{y:-34,'text-anchor':'middle',class:'lbl'},g,'R1');
+      el('text',{y:48,'text-anchor':'middle','font-size':11,fill:'#666'},g,'Router 2911');
+    }else if(d.type==='switch'){
+      const ic=el('g',{filter:'url(#sh)'},g);
+      el('rect',{x:-38,y:-16,width:76,height:32,rx:4,fill:'#2b6cb0',stroke:'#1e4f86'},ic);
+      el('line',{x1:-24,y1:-6,x2:20,y2:-6,stroke:'#fff','stroke-width':2.2,'marker-end':'url(#ah)'},ic);
+      el('line',{x1:24,y1:6,x2:-20,y2:6,stroke:'#fff','stroke-width':2.2,'marker-end':'url(#ah)'},ic);
+      el('text',{y:-26,'text-anchor':'middle',class:'lbl'},g,d.name+(id==='SW2'?' · VLAN 40':' · VLAN 1'));
+    }else{
+      const ic=el('g',{filter:'url(#sh)'},g);
+      el('rect',{x:-24,y:-24,width:48,height:33,rx:3,fill:'#3b4b5c'},ic);
+      el('rect',{x:-20,y:-20,width:40,height:25,fill:'#8fd3ff'},ic);
+      el('rect',{x:-4,y:9,width:8,height:6,fill:'#3b4b5c'},ic);
+      el('rect',{x:-15,y:15,width:30,height:4,rx:2,fill:'#3b4b5c'},ic);
+      el('text',{y:36,'text-anchor':'middle',class:'lbl'},g,d.name);
+      el('text',{y:51,'text-anchor':'middle',class:'ip'},g,d.ip);
+    }
+  }
+  // IPs de interfaces del router
+  el('text',{x:330,y:140,class:'ip','text-anchor':'middle'},D,'192.168.10.1');
+  el('text',{x:672,y:140,class:'ip','text-anchor':'middle'},D,'192.168.20.1');
+}
+
+/* ---------- sobres (PDUs) ---------- */
+function envelope(kind,x,y,moveIdx){
+  const g=el('g',{class:'env',transform:`translate(${x},${y})`},document.getElementById('pdus'));
+  const c=kind==='ARP'?'#f2b705':'#b04ad6';
+  el('rect',{x:-15,y:-10,width:30,height:20,rx:2,fill:c,stroke:'#333','stroke-width':1.2},g);
+  el('polyline',{points:'-15,-10 0,2 15,-10',fill:'none',stroke:'#333','stroke-width':1.2},g);
+  if(moveIdx!==undefined)g.addEventListener('click',e=>{e.stopPropagation();selectMove(sim.idx,moveIdx);});
+  return g;
+}
+function mark(g,outcome){
+  if(outcome==='drop'){
+    el('circle',{cx:14,cy:-12,r:9,fill:'#d93025'},g);el('text',{x:14,y:-8,'text-anchor':'middle',fill:'#fff','font-size':12,'font-weight':700},g,'✘');
+    g.querySelector('rect').setAttribute('opacity','.55');
+  }else{
+    el('circle',{cx:14,cy:-12,r:9,fill:'#16a34a'},g);el('text',{x:14,y:-8,'text-anchor':'middle',fill:'#fff','font-size':12,'font-weight':700},g,outcome==='done'?'★':'✔');
+  }
+}
+const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+function animateMoves(moves,dur){
+  return new Promise(res=>{
+    const envs=moves.map((m,i)=>({m,g:envelope(kindOf(m.frame),DEV[m.from].x,DEV[m.from].y,i)}));
+    const t0=performance.now();
+    function fr(now){
+      const t=Math.min(1,(now-t0)/dur),e=ease(t);
+      for(const {m,g} of envs){const A=DEV[m.from],B=DEV[m.to];g.setAttribute('transform',`translate(${A.x+(B.x-A.x)*e},${A.y+(B.y-A.y)*e-14})`);}
+      if(t<1)requestAnimationFrame(fr);else{envs.forEach(({m,g})=>mark(g,m.outcome));res();}
+    }
+    requestAnimationFrame(fr);
+  });
+}
+function placeStatic(i){
+  const P=document.getElementById('pdus');P.innerHTML='';
+  const s=sim.steps[i];if(!s)return;
+  if(s.origin){const d=DEV[s.dev];envelope('ICMP',d.x,d.y-14);return;}
+  s.moves.forEach((m,k)=>{const g=envelope(kindOf(m.frame),DEV[m.to].x,DEV[m.to].y-14,k);mark(g,m.outcome);});
+}
+function highlight(ids){document.querySelectorAll('.dev').forEach(g=>g.classList.toggle('active',ids.includes(g.id.slice(4))));}
+
+/* =====================================================================
+   5. REPRODUCCIÓN (Play / Paso a paso / Atrás)
+   ===================================================================== */
+let sim=null,busy=false,playing=false,selected=null,shownSnap=null,prevSnap=null;
+const speedMs=()=>[0,1700,1150,800,520,300][+document.getElementById('speed').value];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+async function stepForward(){
+  if(!sim||busy||sim.idx>=sim.steps.length-1)return;
+  busy=true;updateButtons();
+  sim.idx++;const s=sim.steps[sim.idx];
+  document.getElementById('pdus').innerHTML='';
+  renderEvents();
+  if(s.origin){highlight([s.dev]);placeStatic(sim.idx);}
+  else{highlight([...new Set(s.moves.map(m=>m.from))]);await animateMoves(s.moves,speedMs());highlight([...new Set(s.moves.map(m=>m.to))]);}
+  setSnap(sim.idx);
+  renderNarr();selectMove(sim.idx,0);
+  busy=false;updateButtons();
+  if(sim.idx===sim.steps.length-1)finish();
+}
+function stepBack(){
+  if(!sim||busy||sim.idx<=0)return;
+  playing=false;sim.idx--;
+  placeStatic(sim.idx);const s=sim.steps[sim.idx];
+  highlight(s.origin?[s.dev]:[...new Set(s.moves.map(m=>m.to))]);
+  setSnap(sim.idx);renderEvents();renderNarr();selectMove(sim.idx,0);updateButtons();
+}
+function gotoStart(){if(!sim||busy)return;playing=false;sim.idx=-1;stepForward();}
+async function togglePlay(){
+  if(!sim)return;
+  if(playing){playing=false;updateButtons();return;}
+  if(sim.idx>=sim.steps.length-1){sim.idx=-1;}
+  playing=true;updateButtons();
+  while(playing&&sim.idx<sim.steps.length-1){
+    await stepForward();
+    if(sim.idx<sim.steps.length-1)await sleep(Math.max(500,speedMs()*1.1));
+  }
+  playing=false;updateButtons();
+}
+function updateButtons(){
+  const has=!!sim;
+  document.getElementById('bBack').disabled=!has||busy||sim.idx<=0;
+  document.getElementById('bFwd').disabled=!has||busy||sim.idx>=sim.steps.length-1;
+  document.getElementById('bReset').disabled=!has||busy;
+  document.getElementById('bPlay').disabled=!has;
+  document.getElementById('bPlay').textContent=playing?'⏸ Pausar':(has&&sim.idx>=sim.steps.length-1?'↺ Repetir':'▶ Reproducir');
+  if(has){
+    document.getElementById('stepInfo').textContent=`Paso ${sim.idx+1} de ${sim.steps.length}`;
+    document.getElementById('prog').style.width=((sim.idx+1)/sim.steps.length*100)+'%';
+  }
+}
+function setSnap(i){prevSnap=i>0?sim.steps[i-1].snap:(sim.base);shownSnap=sim.steps[i].snap;renderTables();}
+
+/* =====================================================================
+   6. PANELES: narrador, lista de eventos, PDU, tablas
+   ===================================================================== */
+function renderNarr(){
+  const s=sim.steps[sim.idx];const N=document.getElementById('narr');
+  let h=`<div class="stepn">Paso ${sim.idx+1} · ${s.origin?'El origen prepara el paquete':s.moves.length>1?s.moves.length+' tramas viajando al mismo tiempo':'1 trama viajando'}</div><div class="story">`;
+  if(s.origin){
+    h+=`<p>🧑‍💻 ${s.notes[0]}</p><p>🤔 ${s.notes[1]} ${s.notes[2]}</p><p>📌 ${s.notes[3]}</p>`;
+    h+=`<div class="simple">💡 <b>En palabras simples:</b> la <b>IP</b> es como la dirección de una casa (dice a qué barrio/red pertenece) y la <b>máscara /24</b> indica que los 3 primeros números son el “barrio”. ${s.sameNet?'Mismo barrio → entrega directa.':'Otro barrio → hay que pasar por el router (la oficina de correos).'}</div>`;
+  }else{
+    for(const m of s.moves){
+      h+=`<p><span class="dot" style="background:${kindOf(m.frame)==='ARP'?'var(--arp)':'var(--icmp)'}"></span> <b>${m.from} → ${m.to}</b> <small style="color:var(--muted)">(${label(m.frame)})</small>: ${m.short}</p>`;
+    }
+    const sm=s.moves.find(m=>m.simple&&m.outcome!=='drop')||s.moves.find(m=>m.simple);
+    if(sm)h+=`<div class="simple">💡 <b>En palabras simples:</b> ${sm.simple}</div>`;
+  }
+  h+='</div>';
+  if(sim.idx===sim.steps.length-1)h+=finalBox();
+  N.innerHTML=h;
+}
+function finalBox(){
+  const crossed=sim.steps.some(s=>s.moves.some(m=>m.to==='R1'&&m.frame.type==='IPv4'));
+  const nArp=sim.steps.reduce((a,s)=>a+s.moves.filter(m=>m.frame.type==='ARP').length,0);
+  const nIcmp=sim.steps.reduce((a,s)=>a+s.moves.filter(m=>m.frame.type!=='ARP').length,0);
+  if(sim.result==='ok'){
+    return `<div class="final ok"><b>✔ PING EXITOSO.</b> Total de saltos: ${nArp} de ARP y ${nIcmp} de ICMP.<br>
+    ${crossed?'🔑 <b>Lo más importante:</b> las <b>IP</b> (capa 3) viajaron de extremo a extremo <b>sin cambiar</b>; las <b>MAC</b> (capa 2) solo sirven para cada tramo, por eso el router las <b>reemplazó</b>. El TTL bajó en 1 al pasar por el router.':'🔑 <b>Lo más importante:</b> el router no participó (salvo descartar el broadcast ARP). Dentro de una misma red, el <b>switch</b> resuelve todo usando direcciones MAC.'}
+    ${nArp?'<br>🔁 Envía el mismo ping otra vez: las tablas ARP y MAC ya están llenas, así que no habrá ARP y el viaje será más corto.':'<br>⚡ No hubo ARP: todas las MAC ya estaban en las tablas. Así funciona la red “en caliente”.'}</div>`;
+  }
+  return `<div class="final bad"><b>✘ Request timed out.</b> ${sim.routerDrop?'El router descartó el primer paquete mientras averiguaba la MAC del destino (ARP). Pero ya la aprendió: <b>envía el ping otra vez</b> y verás que funciona. Esto pasa igual en Packet Tracer y en equipos Cisco reales.':'El paquete no llegó a su destino.'}</div>`;
+}
+
+function renderEvents(){
+  const tb=document.querySelector('#events tbody');let h='',c=0;
+  sim.steps.forEach((s,i)=>{
+    if(i>sim.idx)return;
+    const rows=s.origin?[{from:'--',to:s.dev,type:'ICMP',k:0,o:'ok'}]:s.moves.map((m,k)=>({from:m.from,to:m.to,type:kindOf(m.frame),k,o:m.outcome}));
+    for(const r of rows){c++;
+      const sel=selected&&selected[0]===i&&selected[1]===r.k;
+      h+=`<tr class="${sel?'sel':''} ${i===sim.idx?'cur':''}" onclick="selectMove(${i},${r.k})"><td>${(i*0.001).toFixed(3)}</td><td>${r.from}</td><td>${r.to}</td><td><span class="dot" style="background:${r.type==='ARP'?'var(--arp)':'var(--icmp)'}"></span> ${r.type}</td><td>${r.o==='drop'?'<span class="st-bad">✘</span>':r.o==='done'?'★':''}</td></tr>`;}
+  });
+  tb.innerHTML=h;
+  document.getElementById('evCount').textContent=c+' eventos';
+  const cur=tb.querySelector('tr.cur:last-child')||tb.lastElementChild;if(cur)cur.scrollIntoView({block:'nearest'});
+}
+
+function selectMove(i,k){
+  if(!sim)return;selected=[i,k];
+  document.querySelectorAll('#events tr').forEach(r=>r.classList.remove('sel'));
+  renderEvents();
+  const s=sim.steps[i];
+  const E=document.getElementById('tExp'),O=document.getElementById('tOsi'),H=document.getElementById('tHdr');
+  if(s.origin){
+    document.getElementById('pduTitle').textContent=`En ${s.dev} · ICMP (origen)`;
+    E.innerHTML=`<div class="hdr">¿Qué decide ${s.dev} antes de enviar?</div><ul class="notes">${s.notes.map(n=>`<li>${n}</li>`).join('')}</ul>`;
+    O.innerHTML=`<div class="osi"><div><h4>Capas de entrada</h4><div class="layer off">— (el paquete nace aquí)</div></div><div><h4>Capas de salida</h4>
+      <div class="layer"><b>Capa 3</b> Crea el paquete IP: ${DEV[s.dev].ip} → ${sim.dstIp}, TTL 128, protocolo ICMP.</div>
+      <div class="layer"><b>Capa 2</b> ${sim.steps[1]&&sim.steps[1].moves[0].frame.type==='ARP'?'No conoce la MAC del siguiente salto → primero ARP.':'Encapsula en Ethernet con la MAC conocida.'}</div>
+      <div class="layer"><b>Capa 1</b> Prepara el envío por Fa0.</div></div></div>`;
+    H.innerHTML='<span style="color:var(--muted)">Avanza al siguiente paso para ver los encabezados de la primera trama que sale.</span>';
+    return;
+  }
+  const m=s.moves[k];
+  document.getElementById('pduTitle').textContent=`${label(m.frame)} · ${m.from} (${m.fromPort}) → ${m.to} (${m.toPort})`;
+  E.innerHTML=`<div class="hdr">📤 ¿Por qué se envió?</div><p style="margin:4px 0 10px">${m.why}</p>
+    <div class="hdr">📥 ¿Qué hizo ${m.to} al recibirlo? ${m.outcome==='drop'?'<span class="st-bad">(DESCARTADO)</span>':'<span class="st-ok">(PROCESADO)</span>'}</div>
+    <ul class="notes">${m.notes.map(n=>`<li>${n}</li>`).join('')}</ul>${m.simple?`<div class="simple">💡 ${m.simple}</div>`:''}`;
+  const lay=(arr,emp)=>arr.length?arr.map(([l,t])=>`<div class="layer"><b>${l}</b> ${t}</div>`).join(''):`<div class="layer off">${emp}</div>`;
+  O.innerHTML=`<p style="margin:0 0 8px;color:var(--muted);font-size:13px">Así lo muestra Packet Tracer en “PDU Information at Device: <b>${m.to}</b>”. Los switches trabajan hasta la <b>capa 2</b>; los routers hasta la <b>capa 3</b>; los PC llegan hasta la aplicación.</p>
+    <div class="osi"><div><h4>⬇ Capas de entrada</h4>${lay(m.osiIn,'—')}</div><div><h4>⬆ Capas de salida</h4>${lay(m.osiOut,'— (no sale nada: fin del recorrido de esta trama)')}</div></div>`;
+  H.innerHTML=headersHtml(m);
+}
+
+function headersHtml(m){
+  const f=m.frame;const rew=m.from==='R1'&&f.type==='IPv4';
+  const F=(t,v,chg,tip)=>`<div class="f ${chg?'chg':''}" title="${tip||''}"><small>${t}</small><code>${v}</code></div>`;
+  let h=`<div class="hdr">La “muñeca rusa” (encapsulación)</div><div class="nest">
+    <div style="background:#dbeafe">Ethernet: MAC dest. · MAC orig. · Tipo</div>
+    ${f.type==='ARP'?'<div style="background:#fff3c4">ARP: pregunta/respuesta</div>':'<div style="background:#e9d5ff">IP: IP orig. · IP dest. · TTL</div><div style="background:#f5d0fe">ICMP: Echo</div>'}
+    <div style="background:#dbeafe">FCS</div></div>`;
+  h+=`<div class="hdr">Ethernet II (capa 2) ${rew?'<span style="color:#b07d00;font-weight:400">· 🔁 MACs reescritas por el router</span>':''}</div><div class="fields">
+    ${F('MAC destino',f.dst,rew,'¿A qué tarjeta de red va en ESTE tramo?')}${F('= dueño',macOwner(f.dst),rew)}
+    ${F('MAC origen',f.src,rew,'¿Qué tarjeta lo envió en ESTE tramo?')}${F('= dueño',macOwner(f.src),rew)}
+    ${F('Tipo',f.type==='ARP'?'0x0806 (ARP)':'0x0800 (IPv4)')}</div>`;
+  if(f.type==='ARP'){const a=f.arp;
+    h+=`<div class="hdr">ARP</div><div class="fields">${F('Operación',a.op===1?'1 · Request (pregunta)':'2 · Reply (respuesta)')}${F('MAC emisor',a.smac)}${F('IP emisor',a.sip)}${F('MAC objetivo',a.tmac+(a.tmac===ZERO?' (desconocida)':''))}${F('IP objetivo',a.tip)}</div>`;
+  }else{const p=f.ip;
+    h+=`<div class="hdr">IPv4 (capa 3) <span style="color:var(--muted);font-weight:400">· las IP no cambian en todo el viaje</span></div><div class="fields">${F('Versión','4')}${F('IHL','5')}${F('TTL',p.ttl,rew,'Tiempo de vida: cada router le resta 1')}${F('Protocolo','1 (ICMP)')}${F('IP origen',p.src)}${F('IP destino',p.dst)}</div>
+    <div class="hdr">ICMP</div><div class="fields">${F('Tipo',p.icmp.type===8?'8 · Echo Request':'0 · Echo Reply')}${F('Código','0')}${F('Secuencia',p.icmp.seq)}${F('Datos','32 bytes')}</div>`;
+  }
+  return h;
+}
+
+/* ---- tablas en vivo ---- */
+function renderTables(){
+  const S=shownSnap||NET,P=prevSnap||{arp:{},mac:{}};
+  const isNew=(path,key)=>{const o=path(P);return !(o&&o[key]);};
+  let h='';
+  for(const sw of ['SW1','SW2']){
+    const t=S.mac[sw];const ks=Object.keys(t);
+    h+=`<div class="tb"><h5>${sw} · tabla MAC <span>show mac address-table</span></h5><table><tr><th>VLAN</th><th>MAC</th><th>Puerto</th><th>Equipo</th></tr>${ks.length?ks.map(k=>`<tr class="${isNew(s=>s.mac&&s.mac[sw],k)?'new':''}"><td>${t[k].vlan}</td><td>${k}</td><td>${t[k].port}</td><td>${macOwner(k)}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">vacía: el switch aún no ha visto tramas</td></tr>'}</table></div>`;
+  }
+  const ra=S.arp.R1,rk=Object.keys(ra);
+  h+=`<div class="tb"><h5>R1 · tabla ARP <span>show ip arp</span></h5><table><tr><th>IP</th><th>MAC</th><th>Int.</th></tr>
+    <tr><td>192.168.10.1</td><td>0001.4211.0A01</td><td>G0/0 (propia)</td></tr><tr><td>192.168.20.1</td><td>0001.4211.0A02</td><td>G0/1 (propia)</td></tr>
+    ${rk.map(k=>`<tr class="${isNew(s=>s.arp&&s.arp.R1,k)?'new':''}"><td>${k}</td><td>${ra[k].mac}</td><td>${ra[k].iface}</td></tr>`).join('')}</table></div>`;
+  for(const id of PCS){
+    const t=S.arp[id],ks=Object.keys(t);
+    h+=`<div class="tb"><h5>${id} · ${DEV[id].ip} <span>arp -a</span></h5><table><tr><th>IP</th><th>MAC</th></tr>${ks.length?ks.map(k=>`<tr class="${isNew(s=>s.arp&&s.arp[id],k)?'new':''}"><td>${k}</td><td>${t[k]}</td></tr>`).join(''):'<tr><td colspan="2" class="empty">No ARP Entries Found</td></tr>'}</table></div>`;
+  }
+  document.getElementById('live').innerHTML=h;
+}
+
+/* =====================================================================
+   7. ACCIONES DEL USUARIO
+   ===================================================================== */
+const results=[];const consoles={};
+function fillSelects(){
+  const s=document.getElementById('src'),d=document.getElementById('dst');
+  s.innerHTML=PCS.map(id=>`<option value="${id}">${id} (${DEV[id].ip})</option>`).join('');
+  const refresh=()=>{const src=s.value;d.innerHTML=PCS.filter(x=>x!==src).map(id=>`<option value="${DEV[id].ip}">${id} (${DEV[id].ip})</option>`).join('')+
+    `<option value="192.168.10.1">R1 G0/0 (192.168.10.1)</option><option value="192.168.20.1">R1 G0/1 (192.168.20.1)</option>`;};
+  s.onchange=refresh;refresh();
+}
+function scenario(src,dst,repeat){
+  document.getElementById('src').value=src;document.getElementById('src').onchange();
+  document.getElementById('dst').value=dst;
+  if(repeat&&!Object.keys(NET.arp.PC1).length){
+    // si no se hizo antes el escenario 2, se hace "en silencio" para llenar tablas
+    realistic=false;const r=simulate(src,dst);NET=r.final;
+  }
+  sendPing();
+}
+function sendPing(){
+  if(busy)return;
+  playing=false;
+  realistic=document.getElementById('realistic').checked;
+  const src=document.getElementById('src').value,dst=document.getElementById('dst').value;
+  const base=clone(NET);
+  sim=simulate(src,dst);sim.idx=-1;sim.base=base;
+  NET=sim.final;selected=null;
+  document.querySelector('#events tbody').innerHTML='';
+  updateButtons();
+  togglePlay();
+}
+function finish(){
+  if(sim.finished)return;sim.finished=true;
+  results.unshift({n:++PINGN,ok:sim.result==='ok',src:sim.src,dst:ipOwner(sim.dstIp)});
+  document.querySelector('#results tbody').innerHTML=results.map(r=>`<tr><td>${r.n}</td><td class="${r.ok?'st-ok':'st-bad'}">${r.ok?'Successful':'Failed'}</td><td>${r.src}</td><td>${r.dst}</td><td><span class="dot" style="background:var(--icmp)"></span> ICMP</td></tr>`).join('');
+  const c=consoles[sim.src]=(consoles[sim.src]||'Packet Tracer PC Command Line 1.0\n')+
+    `C:\\>ping -n 1 ${sim.dstIp}\n\nPinging ${sim.dstIp} with 32 bytes of data:\n\n`+
+    (sim.result==='ok'?`Reply from ${sim.dstIp}: bytes=32 time<1ms TTL=${sim.replyTtl}\n\nPing statistics for ${sim.dstIp}:\n    Packets: Sent = 1, Received = 1, Lost = 0 (0% loss),\n\n`
+      :`Request timed out.\n\nPing statistics for ${sim.dstIp}:\n    Packets: Sent = 1, Received = 0, Lost = 1 (100% loss),\n\n`);
+  showConsole(sim.src);
+}
+function showConsole(id){
+  document.getElementById('cmdTitle').textContent=id+' · '+DEV[id].ip;
+  const C=document.getElementById('cmd');C.textContent=(consoles[id]||'Packet Tracer PC Command Line 1.0\n')+'C:\\>';C.scrollTop=C.scrollHeight;
+}
+function resetNet(){
+  playing=false;NET=emptyState();shownSnap=null;prevSnap=null;sim=null;selected=null;
+  document.getElementById('pdus').innerHTML='';highlight([]);
+  document.querySelector('#events tbody').innerHTML='';document.getElementById('evCount').textContent='';
+  document.getElementById('narr').innerHTML='<div class="story"><p>🔄 Red reiniciada: todas las <b>tablas ARP</b> y <b>tablas MAC</b> están vacías, como si acabaras de encender los equipos. Envía un ping para ver el proceso completo desde cero.</p></div>';
+  document.getElementById('stepInfo').textContent='Sin simulación';document.getElementById('prog').style.width='0';
+  renderTables();updateButtons();
+}
+
+/* ---- tabs ---- */
+document.querySelectorAll('.tabs button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.tabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.tabpane').forEach(p=>p.classList.toggle('on',p.id===b.dataset.t));
+});
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='SELECT'||e.target.tagName==='INPUT')return;
+  if(e.key==='ArrowRight'){playing=false;stepForward();}
+  else if(e.key==='ArrowLeft')stepBack();
+  else if(e.key===' '){e.preventDefault();togglePlay();}
+  else if(e.key==='Escape')closeModal();
+});
+
+/* =====================================================================
+   8. VENTANAS: dispositivo, bienvenida, conceptos
+   ===================================================================== */
+function modal(title,html){document.getElementById('mTitle').innerHTML=title;document.getElementById('mBody').innerHTML=html;document.getElementById('modal').classList.add('on');}
+function closeModal(){document.getElementById('modal').classList.remove('on');}
+
+function openDevice(id){
+  const d=DEV[id],S=shownSnap||NET;
+  let cfg='',tab='',cli='';
+  if(d.type==='pc'){
+    if(consoles[id]!==undefined||true)showConsole(id);
+    cfg=`<table><tr><th>Parámetro</th><th>Valor</th><th>¿Para qué sirve?</th></tr>
+      <tr><td>Dirección IP</td><td>${d.ip}</td><td style="font-family:inherit">Su “dirección de casa” en la red.</td></tr>
+      <tr><td>Máscara</td><td>${d.mask} (/24)</td><td style="font-family:inherit">Indica qué parte de la IP es la red: 192.168.x.<b>?</b></td></tr>
+      <tr><td>Puerta de enlace</td><td>${d.gw}</td><td style="font-family:inherit">A quién enviar lo que va a OTRA red (el router).</td></tr>
+      <tr><td>MAC</td><td>${d.mac}</td><td style="font-family:inherit">Identificador físico de su tarjeta de red (no cambia).</td></tr>
+      <tr><td>Conectado a</td><td>${peer(id,'Fa0').dev} ${peer(id,'Fa0').port}</td><td style="font-family:inherit">Puerto del switch.</td></tr></table>`;
+    const t=S.arp[id];
+    cli=`C:\\>ipconfig\n\nFastEthernet0 Connection:\n   Physical Address................: ${d.mac}\n   IPv4 Address....................: ${d.ip}\n   Subnet Mask.....................: ${d.mask}\n   Default Gateway.................: ${d.gw}\n\nC:\\>arp -a\n`+(Object.keys(t).length?`  Internet Address      Physical Address      Type\n`+Object.keys(t).map(k=>`  ${k.padEnd(22)}${t[k].padEnd(22)}dynamic`).join('\n'):'No ARP Entries Found');
+  }else if(d.type==='router'){
+    cfg=`<table><tr><th>Interfaz</th><th>IP</th><th>Máscara</th><th>MAC</th><th>Red</th></tr>${Object.keys(d.ifaces).map(k=>`<tr><td>${k}</td><td>${d.ifaces[k].ip}</td><td>/24</td><td>${d.ifaces[k].mac}</td><td style="font-family:inherit">${d.ifaces[k].desc}</td></tr>`).join('')}</table>
+    <p style="font-size:13.5px">El router tiene <b>una pata en cada red</b>. Cada interfaz es la <b>puerta de enlace</b> de su red. Como ambas redes están <b>directamente conectadas</b>, no hace falta configurar rutas estáticas ni OSPF.</p>`;
+    cli=`R1# show running-config\n!\nhostname R1\n!\ninterface GigabitEthernet0/0\n description Red 1 - usuarios (SW1)\n ip address 192.168.10.1 255.255.255.0\n no shutdown\n!\ninterface GigabitEthernet0/1\n description Red 2 - VLAN 40 (SW2)\n ip address 192.168.20.1 255.255.255.0\n no shutdown\n!\nend\n\nR1# show ip route\nCodes: L - local, C - connected, S - static, R - RIP, O - OSPF ...\n\nGateway of last resort is not set\n\n     192.168.10.0/24 is variably subnetted, 2 subnets, 2 masks\nC       192.168.10.0/24 is directly connected, GigabitEthernet0/0\nL       192.168.10.1/32 is directly connected, GigabitEthernet0/0\n     192.168.20.0/24 is variably subnetted, 2 subnets, 2 masks\nC       192.168.20.0/24 is directly connected, GigabitEthernet0/1\nL       192.168.20.1/32 is directly connected, GigabitEthernet0/1\n\nR1# show ip arp\nProtocol  Address          Age (min)  Hardware Addr   Type   Interface\nInternet  192.168.10.1            -   0001.4211.0A01  ARPA   GigabitEthernet0/0\nInternet  192.168.20.1            -   0001.4211.0A02  ARPA   GigabitEthernet0/1\n`+Object.keys(S.arp.R1).map(k=>`Internet  ${k.padEnd(16)}        0   ${S.arp.R1[k].mac}  ARPA   GigabitEthernet${S.arp.R1[k].iface.slice(1)}`).join('\n');
+  }else{
+    const t=S.mac[id];
+    cfg=`<table><tr><th>Puerto</th><th>VLAN</th><th>Conectado a</th></tr>${Object.keys(d.ports).map(p=>`<tr><td>${p}</td><td>${d.ports[p]}</td><td>${peer(id,p).dev} ${peer(id,p).port}</td></tr>`).join('')}</table>
+    <p style="font-size:13.5px">${id==='SW2'?'Todos sus puertos están en modo <b>access</b> en la <b>VLAN 40</b> (incluido el que va al router, G0/1). Como solo hay una VLAN por switch, no se necesita trunk.':'Todos sus puertos están en la <b>VLAN 1</b>, que es la VLAN por defecto de los switches Cisco.'} El switch trabaja en <b>capa 2</b>: no mira IPs, solo <b>direcciones MAC</b>.</p>`;
+    cli=(id==='SW2'?`SW2# show running-config\n!\nhostname SW2\n!\nvlan 40\n name RED2\n!\ninterface range FastEthernet0/1 - 2\n switchport mode access\n switchport access vlan 40\n!\ninterface GigabitEthernet0/1\n description Enlace a R1 G0/1\n switchport mode access\n switchport access vlan 40\n!\nend\n\n`:`SW1# show running-config\n!\nhostname SW1\n! (todos los puertos en VLAN 1 por defecto)\ninterface GigabitEthernet0/1\n description Enlace a R1 G0/0\n!\nend\n\n`)+
+      `${id}# show mac address-table\n          Mac Address Table\n-------------------------------------------\nVlan    Mac Address       Type        Ports\n----    -----------       --------    -----\n`+(Object.keys(t).length?Object.keys(t).map(k=>`${String(t[k].vlan).padEnd(8)}${k.toLowerCase().padEnd(18)}DYNAMIC     ${t[k].port}`).join('\n'):'(vacía)');
+  }
+  modal(`${d.type==='pc'?'💻':d.type==='router'?'🔀':'🔌'} ${id} · ${d.model||'PC'}`,
+    `<div class="tabs" id="dtabs"><button class="on" data-p="d1">Configuración</button><button data-p="d2">CLI / comandos</button></div>
+     <div class="pad" id="d1">${cfg}</div><div class="pad" id="d2" style="display:none"><pre class="cli">${cli.replace(/</g,'&lt;')}</pre></div>`);
+  document.querySelectorAll('#dtabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#dtabs button').forEach(x=>x.classList.toggle('on',x===b));['d1','d2'].forEach(p=>document.getElementById(p).style.display=p===b.dataset.p?'block':'none');});
+}
+
+function openWelcome(){
+  modal('👋 Bienvenido al simulador',`<div class="welcome">
+    <h2>¿Qué hace un paquete para ir de un computador a otro?</h2>
+    <p>Este simulador imita el <b>modo Simulación de Cisco Packet Tracer</b>. Tenemos <b>dos redes</b> unidas por un <b>router</b>:</p>
+    <div class="wgrid">
+      <div><b>🏘 Red 1 (azul) · 192.168.10.0/24</b>SW1 con PC1, PC2 y PC3.</div>
+      <div><b>🏘 Red 2 (verde) · 192.168.20.0/24 · VLAN 40</b>SW2 con PC4 y PC5.</div>
+      <div><b>🔌 Switch = portero del edificio</b>Conecta equipos de la MISMA red. Se guía por direcciones MAC.</div>
+      <div><b>🔀 Router = oficina de correos entre barrios</b>Une redes DIFERENTES. Se guía por direcciones IP.</div>
+    </div>
+    <p><b>Cómo usarlo:</b></p>
+    <ol><li>Elige un <b>escenario guiado</b> (empieza por el 1 y luego el 2).</li>
+    <li>Mira los sobres moverse. <span class="dot" style="background:var(--arp)"></span> amarillo = ARP, <span class="dot" style="background:var(--icmp)"></span> morado = ping (ICMP).</li>
+    <li>Pausa cuando quieras y avanza con <kbd>→</kbd>, retrocede con <kbd>←</kbd>; <kbd>Espacio</kbd> = reproducir/pausar.</li>
+    <li>Haz clic en un <b>sobre</b>, en una <b>fila de eventos</b> o en un <b>equipo</b> para ver los detalles.</li></ol>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="primary" onclick="closeModal();scenario('PC1','192.168.10.11')">▶ Empezar con el escenario 1</button><button onclick="closeModal();openConcepts()">📘 Primero, ver los conceptos</button><button onclick="closeModal()">Cerrar</button></div>
+  </div>`);
+}
+function openConcepts(){
+  const C=[
+    ['🏠 Dirección IP','Como la dirección de una casa: <b>192.168.10.10</b>. Los primeros números indican el barrio (la red) y el último, la casa (el equipo). Se configura y puede cambiar.'],
+    ['🎭 Máscara /24 (255.255.255.0)','Dice qué parte de la IP es el “barrio”. Con /24, los <b>3 primeros números</b> son la red: 192.168.10.<b>x</b>. Hay 254 direcciones útiles (de .1 a .254).'],
+    ['🪪 Dirección MAC','Como el número de cédula grabado en la tarjeta de red: <b>00E0.F7A1.0A10</b>. Sirve para entregar dentro de la misma red, tramo a tramo.'],
+    ['🚪 Puerta de enlace (gateway)','La IP del router en tu red (192.168.10.1). Si el destino está en otro barrio, el PC le entrega el paquete a la puerta de enlace.'],
+    ['🔌 Switch (capa 2)','Conecta equipos de una red. Aprende <b>qué MAC está en qué puerto</b> (tabla MAC) y entrega solo por el puerto correcto. Si no sabe, o es broadcast, copia a todos.'],
+    ['🔀 Router (capa 3)','Une redes distintas. Mira la <b>IP destino</b>, consulta su <b>tabla de rutas</b>, resta 1 al TTL y pone el paquete en una trama nueva con MACs nuevas.'],
+    ['📣 ARP','“¿Quién tiene la IP X? Dime tu MAC”. Se pregunta a todos (broadcast) y solo responde el dueño. La respuesta se guarda en la <b>tabla ARP</b> para no volver a preguntar.'],
+    ['🏓 Ping (ICMP)','Echo Request = “¿estás ahí?”; Echo Reply = “¡sí!”. Sirve para probar si hay conexión entre dos equipos.'],
+    ['🏷 VLAN','Una red “virtual” dentro de un switch. Aquí SW2 usa la <b>VLAN 40</b>: todos sus puertos pertenecen a ella. Equipos de VLANs distintas solo se hablan a través de un router.'],
+    ['⏳ TTL','“Tiempo de vida” del paquete. Cada router le resta 1; si llega a 0, se descarta. Así ningún paquete da vueltas para siempre. Windows/PT empieza en 128.'],
+    ['🪆 Encapsulación','Como meter una carta (datos) en un sobre con dirección final (IP) y ese sobre dentro de otro con la dirección del siguiente tramo (MAC). El router cambia solo el sobre exterior.'],
+    ['📢 Dominio de broadcast','La zona hasta donde llega un “grito” (broadcast). El switch lo repite; <b>el router lo detiene</b>. Por eso cada red es un dominio de broadcast separado.'],
+  ];
+  modal('📘 Conceptos básicos (explicados sin tecnicismos)',C.map(([t,d],i)=>`<details ${i<3?'open':''}><summary>${t}</summary><p>${d}</p></details>`).join(''));
+}
+
+/* ---- inicio ---- */
+drawTopo();fillSelects();renderTables();updateButtons();
+setTimeout(openWelcome,300);
+</script>
+</body>
+</html>
